@@ -250,7 +250,10 @@ struct TaskRow: View {
     @State private var hovering = false
     @State private var showingReschedule = false
 
-    private var isChecked: Bool { isCompleting || isDone }
+    // Only show the checked/strikethrough state for tasks the user just completed.
+    // The server already excludes closed tasks via include_closed=false; status name
+    // strings (e.g. "Done", "Resolved") in custom statuses do NOT mean done.
+    private var isChecked: Bool { isCompleting }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -382,10 +385,6 @@ struct TaskRow: View {
         )
     }
 
-    private var isDone: Bool {
-        let s = task.status.lowercased()
-        return s.contains("complete") || s == "closed" || s == "done" || s == "resolved"
-    }
     private var isOverdue: Bool {
         guard let d = task.dueDate else { return false }
         return d < Date()
