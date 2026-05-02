@@ -20,6 +20,7 @@ swiftc \
   Sources/ClickUpAPI.swift \
   Sources/KeychainStore.swift \
   Sources/UpdateManager.swift \
+  Sources/ThemeManager.swift \
   -o "$APP_BUNDLE/Contents/MacOS/$APP" \
   -framework AppKit \
   -framework SwiftUI \

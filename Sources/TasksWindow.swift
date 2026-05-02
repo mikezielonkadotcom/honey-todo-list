@@ -33,8 +33,10 @@ final class TasksWindow: NSObject, NSWindowDelegate {
         )
         w.title = "Honey Todo List"
         w.titlebarAppearsTransparent = true
-        w.titleVisibility = .visible
+        w.titleVisibility = .hidden
         w.isReleasedWhenClosed = false
+        w.styleMask.insert(.fullSizeContentView)
+        w.standardWindowButton(.zoomButton)?.isEnabled = true
         w.center()
         w.setFrameAutosaveName("HoneyTodoMain")
         w.delegate = self

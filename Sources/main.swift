@@ -11,6 +11,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMainMenu()
 
+        ThemeManager.shared.apply()
         globalTaskStore = TaskStore()
         globalTasksWindow = TasksWindow(store: globalTaskStore!)
         globalStatusBarController = StatusBarController(tasksWindow: globalTasksWindow!)

@@ -37,6 +37,7 @@ final class PreferencesWindow: NSObject, NSWindowDelegate {
 
 struct PreferencesView: View {
     @ObservedObject var store: TaskStore
+    @ObservedObject private var theme = ThemeManager.shared
     @State private var token: String = KeychainStore.shared.token ?? ""
     @State private var showInDock: Bool = DockManager.isShowingInDock
     @State private var todayOn: Bool = TaskStore.loadEnabledTabs().contains(.today)
@@ -58,6 +59,12 @@ struct PreferencesView: View {
                 Toggle("All Due", isOn: $allOn)
             }
             Section("Appearance") {
+                Picker("Theme", selection: $theme.theme) {
+                    ForEach(AppTheme.allCases) { t in
+                        Text(t.label).tag(t)
+                    }
+                }
+                .pickerStyle(.segmented)
                 Toggle("Show in Dock", isOn: $showInDock)
                     .help("When off, Honey Todo List runs as a menu bar app only.")
             }
