@@ -88,6 +88,21 @@ final class TaskStore: ObservableObject {
         return a.name < b.name
     }
 
+    func reschedule(_ task: ClickUpTask, to newDate: Date?, hasTime: Bool = true) {
+        guard !completingIds.contains(task.id) else { return }
+        completingIds.insert(task.id)
+        Task {
+            do {
+                try await ClickUpAPI.shared.setDueDate(taskId: task.id, dueDate: newDate, hasTime: hasTime)
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                await self.refreshAsync()
+            } catch {
+                self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            self.completingIds.remove(task.id)
+        }
+    }
+
     func complete(_ task: ClickUpTask) {
         guard !completingIds.contains(task.id) else { return }
         completingIds.insert(task.id)

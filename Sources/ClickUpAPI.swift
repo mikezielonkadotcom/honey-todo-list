@@ -155,6 +155,29 @@ actor ClickUpAPI {
         try await setStatus(taskId: task.id, status: name)
     }
 
+    /// Update a task's due date. Pass nil to clear it. `hasTime` controls whether the time component is shown in ClickUp.
+    func setDueDate(taskId: String, dueDate: Date?, hasTime: Bool) async throws {
+        guard let token = KeychainStore.shared.token else { throw ClickUpError.missingToken }
+        var req = URLRequest(url: base.appendingPathComponent("task/\(taskId)"))
+        req.httpMethod = "PUT"
+        req.setValue(token, forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var body: [String: Any] = [:]
+        if let d = dueDate {
+            body["due_date"] = Int64(d.timeIntervalSince1970 * 1000)
+            body["due_date_time"] = hasTime
+        } else {
+            body["due_date"] = NSNull()
+            body["due_date_time"] = false
+        }
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            throw ClickUpError.http(code, String(data: data, encoding: .utf8) ?? "")
+        }
+    }
+
     func setStatus(taskId: String, status: String) async throws {
         guard let token = KeychainStore.shared.token else { throw ClickUpError.missingToken }
         var req = URLRequest(url: base.appendingPathComponent("task/\(taskId)"))
