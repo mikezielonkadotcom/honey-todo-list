@@ -296,7 +296,7 @@ struct TaskRow: View {
                 }
             }
             Spacer(minLength: 0)
-            if hovering && !isCompleting {
+            if (hovering || showingReschedule) && !isCompleting {
                 HStack(spacing: 8) {
                     Button {
                         showingReschedule = true
