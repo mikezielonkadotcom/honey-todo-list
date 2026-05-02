@@ -90,7 +90,7 @@ final class TaskStore: ObservableObject {
     func complete(_ task: ClickUpTask) {
         Task {
             do {
-                try await ClickUpAPI.shared.setStatus(taskId: task.id, status: "complete")
+                try await ClickUpAPI.shared.completeTask(task)
                 await self.refreshAsync()
             } catch {
                 self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription

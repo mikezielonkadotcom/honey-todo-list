@@ -7,6 +7,7 @@ struct ClickUpTask: Identifiable, Hashable {
     let url: String
     let dueDate: Date?
     let priority: Int?
+    let listId: String?
     let listName: String?
     let folderName: String?
 }
@@ -119,9 +120,39 @@ actor ClickUpAPI {
             if let n = p["priority"] as? Int { return n }
             return nil
         }
-        let listName = (d["list"] as? [String: Any])?["name"] as? String
+        let listObj = d["list"] as? [String: Any]
+        let listId = listObj?["id"] as? String ?? (listObj?["id"] as? Int).map { "\($0)" }
+        let listName = listObj?["name"] as? String
         let folderName = (d["folder"] as? [String: Any])?["name"] as? String
-        return ClickUpTask(id: id, name: name, status: status, url: url, dueDate: due, priority: priority, listName: listName, folderName: folderName)
+        return ClickUpTask(id: id, name: name, status: status, url: url, dueDate: due, priority: priority, listId: listId, listName: listName, folderName: folderName)
+    }
+
+    private var closedStatusCache: [String: String] = [:]
+
+    /// Resolve the "closed"-type status name for a given ClickUp list.
+    /// Each list defines its own status set ("Complete", "Done", "Resolved", etc.) — pick the one whose type is "closed", falling back to "done".
+    func closedStatusName(forListId listId: String) async throws -> String {
+        if let cached = closedStatusCache[listId] { return cached }
+        let data = try await request("list/\(listId)")
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let statuses = json["statuses"] as? [[String: Any]] else {
+            throw ClickUpError.decode("list payload")
+        }
+        let closed = statuses.first { ($0["type"] as? String) == "closed" }
+        let done = statuses.first { ($0["type"] as? String) == "done" }
+        guard let pick = (closed ?? done ?? statuses.last)?["status"] as? String else {
+            throw ClickUpError.decode("no closed/done status on list")
+        }
+        closedStatusCache[listId] = pick
+        return pick
+    }
+
+    func completeTask(_ task: ClickUpTask) async throws {
+        guard let listId = task.listId else {
+            throw ClickUpError.decode("task missing list id")
+        }
+        let name = try await closedStatusName(forListId: listId)
+        try await setStatus(taskId: task.id, status: name)
     }
 
     func setStatus(taskId: String, status: String) async throws {
