@@ -84,7 +84,7 @@ actor ClickUpAPI {
                 let data = try await request("team/\(team)/task", query: q)
                 guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                       let tasks = json["tasks"] as? [[String: Any]] else { break }
-                let parsed = tasks.compactMap { parseTask($0, includeNoDueDate: includeNoDueDate) }
+                let parsed = tasks.compactMap { parseTask($0, includeNoDueDate: includeNoDueDate, requireAssignee: userId) }
                 all.append(contentsOf: parsed)
                 if tasks.count < 100 { break }
                 page += 1
@@ -96,9 +96,17 @@ actor ClickUpAPI {
         return all.filter { seen.insert($0.id).inserted }
     }
 
-    private func parseTask(_ d: [String: Any], includeNoDueDate: Bool) -> ClickUpTask? {
+    private func parseTask(_ d: [String: Any], includeNoDueDate: Bool, requireAssignee: String) -> ClickUpTask? {
         guard let id = d["id"] as? String,
               let name = d["name"] as? String else { return nil }
+        // Strict: drop tasks not assigned to the current user (subtasks=true can leak in others).
+        let assignees = d["assignees"] as? [[String: Any]] ?? []
+        let assigneeIds: [String] = assignees.compactMap {
+            if let s = $0["id"] as? String { return s }
+            if let n = $0["id"] as? Int { return "\(n)" }
+            return nil
+        }
+        guard assigneeIds.contains(requireAssignee) else { return nil }
         let status = (d["status"] as? [String: Any])?["status"] as? String ?? "open"
         let url = d["url"] as? String ?? ""
         var due: Date? = nil
