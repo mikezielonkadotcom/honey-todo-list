@@ -25,6 +25,7 @@ final class TaskStore: ObservableObject {
 
     @Published var enabledTabs: Set<TaskTab> = TaskStore.loadEnabledTabs()
     @Published var selectedTab: TaskTab = .today
+    @Published var completingIds: Set<String> = []
 
     static func loadEnabledTabs() -> Set<TaskTab> {
         var s: Set<TaskTab> = []
@@ -88,13 +89,18 @@ final class TaskStore: ObservableObject {
     }
 
     func complete(_ task: ClickUpTask) {
+        guard !completingIds.contains(task.id) else { return }
+        completingIds.insert(task.id)
         Task {
             do {
                 try await ClickUpAPI.shared.completeTask(task)
+                // Hold the checked-and-faded state briefly so the user sees it land.
+                try? await Task.sleep(nanoseconds: 350_000_000)
                 await self.refreshAsync()
             } catch {
                 self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }
+            self.completingIds.remove(task.id)
         }
     }
 }

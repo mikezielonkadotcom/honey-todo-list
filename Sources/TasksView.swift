@@ -59,12 +59,19 @@ struct TasksView: View {
         } else {
             List {
                 ForEach(tasks) { t in
-                    TaskRow(task: t, onComplete: { store.complete(t) })
-                        .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+                    TaskRow(
+                        task: t,
+                        isCompleting: store.completingIds.contains(t.id),
+                        onComplete: { store.complete(t) }
+                    )
+                    .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
                 }
             }
             .listStyle(.inset)
             .scrollContentBackground(.hidden)
+            .animation(.easeInOut(duration: 0.25), value: tasks.map(\.id))
+            .animation(.easeInOut(duration: 0.25), value: store.completingIds)
         }
     }
 
@@ -129,23 +136,29 @@ struct TasksView: View {
 
 struct TaskRow: View {
     let task: ClickUpTask
+    let isCompleting: Bool
     let onComplete: () -> Void
     @State private var hovering = false
 
+    private var isChecked: Bool { isCompleting || isDone }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Button(action: onComplete) {
-                Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
+            Button(action: { if !isCompleting { onComplete() } }) {
+                Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 17))
-                    .foregroundStyle(isDone ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(isChecked ? Color.accentColor : Color.secondary)
+                    .symbolEffect(.bounce, value: isCompleting)
+                    .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(.plain)
+            .disabled(isCompleting)
             .help("Mark complete")
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(task.name)
                     .font(.system(size: 13))
-                    .strikethrough(isDone)
+                    .strikethrough(isChecked)
                     .lineLimit(2)
                 HStack(spacing: 6) {
                     if let due = task.dueDate {
@@ -179,6 +192,8 @@ struct TaskRow: View {
         }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .opacity(isCompleting ? 0.45 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isCompleting)
         .onTapGesture(count: 2) {
             if let url = URL(string: task.url) { NSWorkspace.shared.open(url) }
         }
