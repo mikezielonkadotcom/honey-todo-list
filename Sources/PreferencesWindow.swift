@@ -49,7 +49,7 @@ struct PreferencesView: View {
         Form {
             Section("ClickUp") {
                 SecureField("Personal API Token (pk_…)", text: $token)
-                Text("Generate at ClickUp → Settings → Apps → API Token. Stored in macOS Keychain.")
+                Text("Generate at ClickUp → Settings → Apps → API Token. Stored locally in ~/Library/Application Support (user-only, FileVault-encrypted).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
