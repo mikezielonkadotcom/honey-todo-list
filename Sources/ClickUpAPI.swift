@@ -4,12 +4,16 @@ struct ClickUpTask: Identifiable, Hashable {
     let id: String
     let name: String
     let status: String
+    let statusType: String  // "open" | "custom" | "closed" | "done"
     let url: String
     let dueDate: Date?
+    let dateClosed: Date?
     let priority: Int?
     let listId: String?
     let listName: String?
     let folderName: String?
+
+    var isClosed: Bool { statusType == "closed" }
 }
 
 enum ClickUpError: Error, LocalizedError {
@@ -61,7 +65,7 @@ actor ClickUpAPI {
         return teams.compactMap { $0["id"] as? String ?? ($0["id"]).map { "\($0)" } }
     }
 
-    /// Fetch tasks assigned to the user across all workspaces, due strictly before `dueBefore`.
+    /// Fetch open tasks assigned to the user across all workspaces, due strictly before `dueBefore`.
     /// Pass nil for no upper bound (returns all open assigned tasks with a due date).
     func tasks(dueBefore: Date?, includeNoDueDate: Bool = false) async throws -> [ClickUpTask] {
         let userId = try await currentUserId()
@@ -100,7 +104,6 @@ actor ClickUpAPI {
     private func parseTask(_ d: [String: Any], includeNoDueDate: Bool, requireAssignee: String) -> ClickUpTask? {
         guard let id = d["id"] as? String,
               let name = d["name"] as? String else { return nil }
-        // Strict: drop tasks not assigned to the current user (subtasks=true can leak in others).
         let assignees = d["assignees"] as? [[String: Any]] ?? []
         let assigneeIds: [String] = assignees.compactMap {
             if let s = $0["id"] as? String { return s }
@@ -108,13 +111,19 @@ actor ClickUpAPI {
             return nil
         }
         guard assigneeIds.contains(requireAssignee) else { return nil }
-        let status = (d["status"] as? [String: Any])?["status"] as? String ?? "open"
+        let statusObj = d["status"] as? [String: Any]
+        let status = statusObj?["status"] as? String ?? "open"
+        let statusType = statusObj?["type"] as? String ?? "open"
         let url = d["url"] as? String ?? ""
         var due: Date? = nil
         if let dueStr = d["due_date"] as? String, let ms = Int64(dueStr) {
             due = Date(timeIntervalSince1970: TimeInterval(ms) / 1000.0)
         }
         if !includeNoDueDate && due == nil { return nil }
+        var dateClosed: Date? = nil
+        if let s = d["date_closed"] as? String, let ms = Int64(s) {
+            dateClosed = Date(timeIntervalSince1970: TimeInterval(ms) / 1000.0)
+        }
         let priority = (d["priority"] as? [String: Any]).flatMap { p -> Int? in
             if let s = p["priority"] as? String, let n = Int(s) { return n }
             if let n = p["priority"] as? Int { return n }
@@ -124,10 +133,68 @@ actor ClickUpAPI {
         let listId = listObj?["id"] as? String ?? (listObj?["id"] as? Int).map { "\($0)" }
         let listName = listObj?["name"] as? String
         let folderName = (d["folder"] as? [String: Any])?["name"] as? String
-        return ClickUpTask(id: id, name: name, status: status, url: url, dueDate: due, priority: priority, listId: listId, listName: listName, folderName: folderName)
+        return ClickUpTask(id: id, name: name, status: status, statusType: statusType, url: url, dueDate: due, dateClosed: dateClosed, priority: priority, listId: listId, listName: listName, folderName: folderName)
+    }
+
+    /// Fetch closed (and "done"-type) tasks assigned to the user, completed within the given window.
+    /// Used when the "Show completed" toggle is on.
+    func completedTasks(doneAfter: Date) async throws -> [ClickUpTask] {
+        let userId = try await currentUserId()
+        let teams = try await teamIds()
+        let ms = Int64(doneAfter.timeIntervalSince1970 * 1000)
+        var all: [ClickUpTask] = []
+        for team in teams {
+            var page = 0
+            while true {
+                let q: [URLQueryItem] = [
+                    URLQueryItem(name: "page", value: "\(page)"),
+                    URLQueryItem(name: "assignees[]", value: userId),
+                    URLQueryItem(name: "subtasks", value: "true"),
+                    URLQueryItem(name: "include_closed", value: "true"),
+                    URLQueryItem(name: "date_done_gt", value: "\(ms)"),
+                    URLQueryItem(name: "order_by", value: "date_done"),
+                    URLQueryItem(name: "reverse", value: "true")
+                ]
+                let data = try await request("team/\(team)/task", query: q)
+                guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let tasks = json["tasks"] as? [[String: Any]] else { break }
+                let parsed = tasks.compactMap { parseTask($0, includeNoDueDate: true, requireAssignee: userId) }
+                    .filter { $0.statusType == "closed" || $0.statusType == "done" }
+                all.append(contentsOf: parsed)
+                if tasks.count < 100 { break }
+                page += 1
+                if page > 10 { break }
+            }
+        }
+        var seen = Set<String>()
+        return all.filter { seen.insert($0.id).inserted }
     }
 
     private var closedStatusCache: [String: String] = [:]
+    private var openStatusCache: [String: String] = [:]
+
+    /// First "open"-type status for a list — used to reopen a completed task.
+    func openStatusName(forListId listId: String) async throws -> String {
+        if let c = openStatusCache[listId] { return c }
+        let data = try await request("list/\(listId)")
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let statuses = json["statuses"] as? [[String: Any]] else {
+            throw ClickUpError.decode("list payload")
+        }
+        let open = statuses.first { ($0["type"] as? String) == "open" }
+        let custom = statuses.first { ($0["type"] as? String) == "custom" }
+        guard let pick = (open ?? custom ?? statuses.first)?["status"] as? String else {
+            throw ClickUpError.decode("no open status on list")
+        }
+        openStatusCache[listId] = pick
+        return pick
+    }
+
+    func reopenTask(_ task: ClickUpTask) async throws {
+        guard let listId = task.listId else { throw ClickUpError.decode("task missing list id") }
+        let name = try await openStatusName(forListId: listId)
+        try await setStatus(taskId: task.id, status: name)
+    }
 
     /// Resolve the "closed"-type status name for a given ClickUp list.
     /// Each list defines its own status set ("Complete", "Done", "Resolved", etc.) — pick the one whose type is "closed", falling back to "done".

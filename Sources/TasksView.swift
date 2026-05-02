@@ -9,7 +9,17 @@ struct TasksView: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.4)
-            content
+            ZStack(alignment: .bottom) {
+                content
+                if let banner = store.undoBanner {
+                    UndoToast(banner: banner,
+                              onUndo: { store.reopen(banner.task) },
+                              onDismiss: { store.dismissUndo() })
+                        .padding(.bottom, 10)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: store.undoBanner)
             Divider().opacity(0.4)
             footer
         }
@@ -35,6 +45,7 @@ struct TasksView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                showCompletedToggle
                 refreshButton
             }
             if orderedEnabledTabs.count > 1 {
@@ -67,6 +78,22 @@ struct TasksView: View {
         }
     }
 
+    private var showCompletedToggle: some View {
+        Button {
+            store.showCompleted.toggle()
+        } label: {
+            Image(systemName: store.showCompleted ? "checkmark.circle.fill" : "checkmark.circle")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(store.showCompleted ? Color.honey : Color.secondary)
+                .padding(7)
+                .background(
+                    Circle().fill(store.showCompleted ? Color.honey.opacity(0.15) : Color.primary.opacity(0.06))
+                )
+        }
+        .buttonStyle(.plain)
+        .help(store.showCompleted ? "Hide completed" : "Show completed")
+    }
+
     private var refreshButton: some View {
         Button {
             store.refresh()
@@ -91,9 +118,10 @@ struct TasksView: View {
     @ViewBuilder
     private var content: some View {
         let tasks = currentTasks
+        let completed = currentCompletedTasks
         if let err = store.lastError {
             errorState(err)
-        } else if tasks.isEmpty && !store.loading {
+        } else if tasks.isEmpty && completed.isEmpty && !store.loading {
             emptyState
         } else {
             ScrollView {
@@ -110,10 +138,23 @@ struct TasksView: View {
                             removal: .opacity.combined(with: .offset(x: -20))
                         ))
                     }
+
+                    if store.showCompleted && !completed.isEmpty {
+                        completedSectionHeader(count: completed.count)
+                        ForEach(completed) { t in
+                            CompletedTaskRow(
+                                task: t,
+                                isReopening: store.completingIds.contains(t.id),
+                                onReopen: { store.reopen(t) }
+                            )
+                            .transition(.opacity)
+                        }
+                    }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .animation(.easeInOut(duration: 0.25), value: tasks.map(\.id))
+                .animation(.easeInOut(duration: 0.25), value: completed.map(\.id))
                 .animation(.easeInOut(duration: 0.25), value: store.completingIds)
             }
         }
@@ -125,6 +166,31 @@ struct TasksView: View {
         case .tomorrow: return store.tomorrowTasks
         case .all: return store.allTasks
         }
+    }
+
+    private var currentCompletedTasks: [ClickUpTask] {
+        switch store.selectedTab {
+        case .today: return store.completedTodayTasks
+        case .tomorrow: return store.completedTomorrowTasks
+        case .all: return store.completedAllTasks
+        }
+    }
+
+    private func completedSectionHeader(count: Int) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 9, weight: .bold))
+            Text("Completed")
+                .font(.system(size: 11, weight: .semibold))
+            Text("\(count)")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.top, 14)
+        .padding(.bottom, 4)
     }
 
     private var emptyState: some View {
@@ -430,6 +496,135 @@ struct TaskRow: View {
         if cal.isDateInTomorrow(date) { return "Tomorrow \(timeFormatter.string(from: date))" }
         if cal.isDateInYesterday(date) { return "Yesterday" }
         return dayFormatter.string(from: date)
+    }
+}
+
+// MARK: - Completed Task Row
+
+struct CompletedTaskRow: View {
+    let task: ClickUpTask
+    let isReopening: Bool
+    let onReopen: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Button(action: { if !isReopening { onReopen() } }) {
+                Image(systemName: hovering ? "arrow.uturn.left.circle.fill" : "checkmark.circle.fill")
+                    .font(.system(size: 19))
+                    .foregroundStyle(hovering ? Color.orange : Color.honey.opacity(0.55))
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+            .disabled(isReopening)
+            .help("Reopen task")
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(task.name)
+                    .font(.system(size: 13, weight: .regular))
+                    .strikethrough()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    if let closed = task.dateClosed {
+                        Text("Done \(Self.relativeFormatter.localizedString(for: closed, relativeTo: Date()))")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                    if let list = task.listName {
+                        Text("·").foregroundStyle(.tertiary).font(.caption)
+                        Text(list)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+            if hovering && !isReopening {
+                Button {
+                    if let url = URL(string: task.url) { NSWorkspace.shared.open(url) }
+                } label: {
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Open in ClickUp")
+                .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(hovering ? Color.primary.opacity(0.05) : Color.clear)
+        )
+        .opacity(isReopening ? 0.42 : 1.0)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .animation(.easeInOut(duration: 0.18), value: hovering)
+        .animation(.easeInOut(duration: 0.2), value: isReopening)
+        .contextMenu {
+            Button("Reopen") { onReopen() }
+            Button("Open in ClickUp") {
+                if let url = URL(string: task.url) { NSWorkspace.shared.open(url) }
+            }
+        }
+    }
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f
+    }()
+}
+
+// MARK: - Undo Toast
+
+struct UndoToast: View {
+    let banner: UndoBanner
+    let onUndo: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Color.honey)
+                .font(.system(size: 14))
+            Text("Marked complete")
+                .font(.system(size: 12.5, weight: .medium))
+            Text(banner.task.name)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: 180, alignment: .leading)
+            Spacer(minLength: 8)
+            Button("Undo") { onUndo() }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.honey)
+            Button {
+                onDismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.regularMaterial)
+                .shadow(color: .black.opacity(0.18), radius: 14, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
     }
 }
 
