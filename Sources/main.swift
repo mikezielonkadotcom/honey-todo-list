@@ -23,6 +23,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             globalTasksWindow?.showWindow()
             globalTaskStore?.refresh()
         }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { @MainActor in
+            UpdateManager.shared.checkForUpdatesInBackground()
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -40,6 +44,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "About Honey Todo List", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
+        appMenu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
         let hideItem = appMenu.addItem(withTitle: "Hide Honey Todo List", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         hideItem.target = NSApp
@@ -71,6 +76,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func openPreferences() { globalStatusBarController?.openPreferencesFromMenu() }
+    @objc func checkForUpdates() { UpdateManager.shared.checkForUpdatesInteractive() }
     @objc func refresh() { globalTaskStore?.refresh() }
     @objc func showWindow() { globalTasksWindow?.showWindow() }
 }

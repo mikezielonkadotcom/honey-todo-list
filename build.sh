@@ -19,6 +19,7 @@ swiftc \
   Sources/TaskStore.swift \
   Sources/ClickUpAPI.swift \
   Sources/KeychainStore.swift \
+  Sources/UpdateManager.swift \
   -o "$APP_BUNDLE/Contents/MacOS/$APP" \
   -framework AppKit \
   -framework SwiftUI \

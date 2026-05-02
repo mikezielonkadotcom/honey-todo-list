@@ -42,6 +42,7 @@ final class StatusBarController: NSObject {
         menu.addItem(item("Show Window", #selector(openWindow)))
         menu.addItem(item("Refresh", #selector(refresh)))
         menu.addItem(.separator())
+        menu.addItem(item("Check for Updates…", #selector(checkForUpdates)))
         menu.addItem(item("Preferences…", #selector(openPreferences), key: ","))
         menu.addItem(.separator())
         menu.addItem(item("Quit", #selector(quit), key: "q"))
@@ -59,6 +60,7 @@ final class StatusBarController: NSObject {
     @objc private func openWindow() { tasksWindow.showWindow() }
     @objc private func refresh() { globalTaskStore?.refresh() }
     @objc private func openPreferences() { openPreferencesFromMenu() }
+    @objc private func checkForUpdates() { UpdateManager.shared.checkForUpdatesInteractive() }
     @objc private func quit() { NSApp.terminate(nil) }
 
     func openPreferencesFromMenu() {
