@@ -24,7 +24,13 @@ struct TasksView: View {
             footer
         }
         .frame(minWidth: 480, minHeight: 540)
-        .background(VisualEffectBackground())
+        .background(
+            ZStack {
+                VisualEffectBackground()
+                Color.appBackground.opacity(0.88)
+            }
+            .ignoresSafeArea()
+        )
         .tint(.honey)
     }
 
@@ -37,11 +43,11 @@ struct TasksView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(headerTitle)
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
                     Text(headerSubtitle)
-                        .font(.system(size: 12))
+                        .font(.system(size: 13))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -52,9 +58,9 @@ struct TasksView: View {
                 PillTabBar(tabs: orderedEnabledTabs, selection: $store.selectedTab)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 38)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 22)
+        .padding(.top, 44)
+        .padding(.bottom, 14)
     }
 
     private var headerTitle: String {
@@ -125,7 +131,7 @@ struct TasksView: View {
             emptyState
         } else {
             ScrollView {
-                LazyVStack(spacing: 4) {
+                LazyVStack(spacing: 8) {
                     ForEach(tasks) { t in
                         TaskRow(
                             task: t,
@@ -151,8 +157,8 @@ struct TasksView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
                 .animation(.easeInOut(duration: 0.25), value: tasks.map(\.id))
                 .animation(.easeInOut(duration: 0.25), value: completed.map(\.id))
                 .animation(.easeInOut(duration: 0.25), value: store.completingIds)
@@ -322,83 +328,101 @@ struct TaskRow: View {
     private var isChecked: Bool { isCompleting }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Button(action: { if !isCompleting { onComplete() } }) {
-                Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 19))
-                    .foregroundStyle(isChecked ? Color.honey : Color.secondary.opacity(0.55))
-                    .symbolEffect(.bounce, value: isCompleting)
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .buttonStyle(.plain)
-            .disabled(isCompleting)
-            .help("Mark complete")
+        HStack(alignment: .top, spacing: 0) {
+            // Left accent stripe colored by list
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(Color.forList(task.listName))
+                .frame(width: 3)
+                .padding(.vertical, 4)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(task.name)
-                    .font(.system(size: 13.5, weight: .medium))
-                    .strikethrough(isChecked)
-                    .lineLimit(2)
-                    .foregroundStyle(isChecked ? Color.secondary : Color.primary)
-                HStack(spacing: 6) {
-                    if let due = task.dueDate {
-                        Label {
-                            Text(Self.dueLabel(due))
-                        } icon: {
+            HStack(alignment: .top, spacing: 13) {
+                Button(action: { if !isCompleting { onComplete() } }) {
+                    Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 21))
+                        .foregroundStyle(isChecked ? Color.honey : Color.secondary.opacity(0.45))
+                        .symbolEffect(.bounce, value: isCompleting)
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(.plain)
+                .disabled(isCompleting)
+                .help("Mark complete")
+                .padding(.top, 1)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(task.name)
+                        .font(.system(size: 14.5, weight: .semibold))
+                        .strikethrough(isChecked)
+                        .lineLimit(2)
+                        .foregroundStyle(isChecked ? Color.secondary : Color.primary)
+                    HStack(spacing: 7) {
+                        if let due = task.dueDate {
+                            duePill(due)
+                        }
+                        if let list = task.listName {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.forList(list))
+                                    .frame(width: 6, height: 6)
+                                Text(list)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        if let p = task.priority, p <= 2 {
+                            priorityChip(p)
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+                if (hovering || showingReschedule) && !isCompleting {
+                    HStack(spacing: 10) {
+                        Button {
+                            showingReschedule = true
+                        } label: {
                             Image(systemName: "calendar")
-                                .font(.system(size: 9))
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
                         }
-                        .labelStyle(InlineLabelStyle())
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(isOverdue ? Color.red : Color.honeyDark)
-                    }
-                    if let list = task.listName {
-                        Text("·").foregroundStyle(.tertiary).font(.caption)
-                        Text(list)
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    if let p = task.priority, p <= 2 {
-                        priorityChip(p)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
-            if (hovering || showingReschedule) && !isCompleting {
-                HStack(spacing: 8) {
-                    Button {
-                        showingReschedule = true
-                    } label: {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Reschedule")
-                    .popover(isPresented: $showingReschedule, arrowEdge: .trailing) {
-                        ReschedulePopover(currentDate: task.dueDate) { date, hasTime in
-                            onReschedule(date, hasTime)
-                            showingReschedule = false
-                        } onClear: {
-                            onReschedule(nil, false)
-                            showingReschedule = false
+                        .buttonStyle(.plain)
+                        .help("Reschedule")
+                        .popover(isPresented: $showingReschedule, arrowEdge: .trailing) {
+                            ReschedulePopover(currentDate: task.dueDate) { date, hasTime in
+                                onReschedule(date, hasTime)
+                                showingReschedule = false
+                            } onClear: {
+                                onReschedule(nil, false)
+                                showingReschedule = false
+                            }
                         }
-                    }
 
-                    Button {
-                        if let url = URL(string: task.url) { NSWorkspace.shared.open(url) }
-                    } label: {
-                        Image(systemName: "arrow.up.right.square")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
+                        Button {
+                            if let url = URL(string: task.url) { NSWorkspace.shared.open(url) }
+                        } label: {
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.system(size: 14))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Open in ClickUp")
                     }
-                    .buttonStyle(.plain)
-                    .help("Open in ClickUp")
+                    .padding(.top, 2)
+                    .transition(.opacity)
                 }
-                .transition(.opacity)
             }
+            .padding(.leading, 13)
+            .padding(.trailing, 14)
+            .padding(.vertical, 13)
         }
+        .background(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(hovering ? Color.cardHover : Color.cardBackground)
+                .shadow(color: .black.opacity(hovering ? 0.06 : 0.04), radius: hovering ? 6 : 3, y: 1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.05), lineWidth: 0.5)
+        )
         .contextMenu {
             Button("Mark Complete") { onComplete() }
             Divider()
@@ -419,12 +443,6 @@ struct TaskRow: View {
                 if let url = URL(string: task.url) { NSWorkspace.shared.open(url) }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(hovering ? Color.primary.opacity(0.05) : Color.clear)
-        )
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .opacity(isCompleting ? 0.42 : 1.0)
@@ -435,19 +453,35 @@ struct TaskRow: View {
         }
     }
 
+    private func duePill(_ due: Date) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "calendar")
+                .font(.system(size: 9, weight: .semibold))
+            Text(Self.dueLabel(due))
+                .font(.system(size: 11.5, weight: .semibold))
+        }
+        .foregroundStyle(isOverdue ? Color.overdueFg : Color.honeyDark)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(isOverdue ? Color.overdueBg : Color.honey.opacity(0.13))
+        )
+    }
+
     private func priorityChip(_ p: Int) -> some View {
         let label = p == 1 ? "Urgent" : "High"
-        let color: Color = p == 1 ? .red : .orange
+        let color: Color = p == 1 ? Color(red: 0.85, green: 0.30, blue: 0.30) : Color(red: 0.93, green: 0.55, blue: 0.20)
         return HStack(spacing: 3) {
-            Image(systemName: "flag.fill").font(.system(size: 8))
-            Text(label).font(.system(size: 10.5, weight: .semibold))
+            Image(systemName: "flag.fill").font(.system(size: 9))
+            Text(label).font(.system(size: 11, weight: .semibold))
         }
         .foregroundStyle(color)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
         .background(
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(color.opacity(0.12))
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(color.opacity(0.13))
         )
     }
 
@@ -508,57 +542,70 @@ struct CompletedTaskRow: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Button(action: { if !isReopening { onReopen() } }) {
-                Image(systemName: hovering ? "arrow.uturn.left.circle.fill" : "checkmark.circle.fill")
-                    .font(.system(size: 19))
-                    .foregroundStyle(hovering ? Color.orange : Color.honey.opacity(0.55))
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .buttonStyle(.plain)
-            .disabled(isReopening)
-            .help("Reopen task")
+        HStack(alignment: .top, spacing: 0) {
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(Color.forList(task.listName).opacity(0.45))
+                .frame(width: 3)
+                .padding(.vertical, 4)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(task.name)
-                    .font(.system(size: 13, weight: .regular))
-                    .strikethrough()
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                HStack(spacing: 6) {
-                    if let closed = task.dateClosed {
-                        Text("Done \(Self.relativeFormatter.localizedString(for: closed, relativeTo: Date()))")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
-                    }
-                    if let list = task.listName {
-                        Text("·").foregroundStyle(.tertiary).font(.caption)
-                        Text(list)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                    }
-                }
-            }
-            Spacer(minLength: 0)
-            if hovering && !isReopening {
-                Button {
-                    if let url = URL(string: task.url) { NSWorkspace.shared.open(url) }
-                } label: {
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.tertiary)
+            HStack(alignment: .top, spacing: 13) {
+                Button(action: { if !isReopening { onReopen() } }) {
+                    Image(systemName: hovering ? "arrow.uturn.left.circle.fill" : "checkmark.circle.fill")
+                        .font(.system(size: 21))
+                        .foregroundStyle(hovering ? Color.honeyDark : Color.honey.opacity(0.5))
+                        .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.plain)
-                .help("Open in ClickUp")
-                .transition(.opacity)
+                .disabled(isReopening)
+                .help("Reopen task")
+                .padding(.top, 1)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(task.name)
+                        .font(.system(size: 14, weight: .medium))
+                        .strikethrough()
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    HStack(spacing: 7) {
+                        if let closed = task.dateClosed {
+                            Text("Done \(Self.relativeFormatter.localizedString(for: closed, relativeTo: Date()))")
+                                .font(.system(size: 11.5, weight: .medium))
+                                .foregroundStyle(.tertiary)
+                        }
+                        if let list = task.listName {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(Color.forList(list).opacity(0.55))
+                                    .frame(width: 5, height: 5)
+                                Text(list)
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+                if hovering && !isReopening {
+                    Button {
+                        if let url = URL(string: task.url) { NSWorkspace.shared.open(url) }
+                    } label: {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open in ClickUp")
+                    .transition(.opacity)
+                }
             }
+            .padding(.leading, 13)
+            .padding(.trailing, 14)
+            .padding(.vertical, 11)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(hovering ? Color.primary.opacity(0.05) : Color.clear)
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                .fill(Color.cardBackground.opacity(0.6))
         )
         .opacity(isReopening ? 0.42 : 1.0)
         .contentShape(Rectangle())
