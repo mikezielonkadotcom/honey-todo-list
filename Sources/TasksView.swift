@@ -53,6 +53,7 @@ struct TasksView: View {
                 Spacer()
                 showCompletedToggle
                 refreshButton
+                preferencesButton
             }
             if orderedEnabledTabs.count > 1 {
                 PillTabBar(tabs: orderedEnabledTabs, selection: $store.selectedTab)
@@ -82,6 +83,21 @@ struct TasksView: View {
         case .all:
             return "\(store.allTasks.count) task\(store.allTasks.count == 1 ? "" : "s") with a due date"
         }
+    }
+
+    private var preferencesButton: some View {
+        Button {
+            globalStatusBarController?.openPreferencesFromMenu()
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(7)
+                .background(Circle().fill(Color.primary.opacity(0.06)))
+        }
+        .buttonStyle(.plain)
+        .help("Preferences (⌘,)")
+        .keyboardShortcut(",", modifiers: .command)
     }
 
     private var showCompletedToggle: some View {
